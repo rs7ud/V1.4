@@ -53,6 +53,8 @@ def is_roblox_link(text):
     patterns = [
         r"https?://www\.roblox\.com/share\?.*type=Server",
         r"https?://www\.roblox\.com/games/\d+.*privateServerLinkCode=",
+        r"https?://www\.roblox\.com/games/start\?.*placeId=.*launchData=",
+        r"https?://www\.roblox\.com/games/start\?.*launchData=.*placeId=",
     ]
     return any(re.search(p, text) for p in patterns)
 
@@ -66,6 +68,15 @@ def resolve_share_link(url):
     deep_link = f"roblox://navigation/share_links?code={code}&type=Server"
     return deep_link, None
 
+def extract_launch_data_params(url):
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    place_id = params.get("placeId", [None])[0]
+    launch_data = params.get("launchData", [None])[0]
+    if place_id and launch_data:
+        return place_id, launch_data
+    return None
+
 def extract_direct_link_params(url):
     parsed = urlparse(url)
     params = parse_qs(parsed.query)
@@ -78,7 +89,7 @@ def extract_direct_link_params(url):
 
 def launch_roblox(place_id, link_code=None):
     if link_code:
-        deep_link = f"roblox://experiences/start?placeId={place_id}&privateServerLinkCode={link_code}"
+        deep_link = f"roblox://experiences/start?placeId={place_id}&linkCode={link_code}"
     else:
         # xfxddoweoaf
         deep_link = place_id
@@ -283,7 +294,7 @@ class App:
                 if is_roblox_link(current):
                     self._handle_link(current)
 
-            time.sleep(1.0)
+            time.sleep(0.1)
 
     def _handle_link(self, url):
         url = url.strip()
@@ -298,6 +309,20 @@ class App:
                 self._log(f"✓ Launched! Place ID: {place_id}", "ok")
             else:
                 self._log("i cant parse link opening in browser", "err")
+                webbrowser.open(url)
+
+        elif "launchData=" in url:
+            result = extract_launch_data_params(url)
+            if result:
+                place_id, launch_data = result
+                deep_link = f"roblox://experiences/start?placeId={place_id}&launchData={launch_data}"
+                if sys.platform == "win32":
+                    os.startfile(deep_link)
+                else:
+                    subprocess.run(["open" if sys.platform == "darwin" else "xdg-open", deep_link])
+                self._log(f"✓ Launched via launch data! Place ID: {place_id}", "ok")
+            else:
+                self._log("i cant parse launch data link opening in browser", "err")
                 webbrowser.open(url)
 
         elif "roblox.com/share" in url:
